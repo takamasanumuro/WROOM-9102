@@ -4,6 +4,8 @@
 #include <ESPmDNS.h>
 #include <WiFiUdp.h>
 #include "ESPAsyncWebServer.h"
+#include "EEPROM.h"
+#include "Preferences.h"
 
 #define USE_OTA 1
 #define USE_WIFI 1
@@ -13,17 +15,34 @@
 using timer = uint32_t;
 // TODO: Test task scheduling with FreeRTOS
 // TODO: Test RemoteDebug library
-// TODO: Test EEPROM library
+// // TODO: Test EEPROM library
 // TODO: Test physical I2C communication*
 // TODO: Test bluetooth communication
 // TODO: Test TCP communication
-
+Preferences nvs_memory;
 AsyncWebServer server(80);
-static int16_t serverAccessCounter = 0;
+static uint16_t serverAccessCounter = 0;
+
+void StartNVSMemory() {
+  nvs_memory.begin("flash", false);
+  serverAccessCounter = nvs_memory.getUShort("access_counter", 0);
+  if (serverAccessCounter == 0) {
+    Serial.printf("No access counter found. Initializing to 0");
+    nvs_memory.putUShort("access_counter", 0);
+  } else {
+    Serial.printf("Access counter found. Value: %d", serverAccessCounter);
+  }
+}
+
+void StoreNVSCounter() {
+  nvs_memory.putUShort("access_counter", serverAccessCounter);
+}
 
 void ServerSetup() {
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
-    request->send(200, "text/plain", "Hello, client #" + String(serverAccessCounter++));
+    request->send(200, "text/plain", "Hello, client #" + String(serverAccessCounter));
+    StoreNVSCounter();
+    serverAccessCounter++;
   });
   server.begin();
 }
@@ -99,7 +118,6 @@ void TogglePin(uint8_t pin, timer millis_delay_time, int16_t count = 0) {
   if (millis() - last_millis > millis_delay_time) {
     last_millis = millis();
     digitalWrite(pin, !digitalRead(pin));
-    Serial.printf("Pin %d toggled %d\n", pin, digitalRead(pin));
     if (count > 0) { // If count is 0 or not specified, the LED will toggle indefinitely.
       if (counter++ > count) {
         counter = 0;
@@ -114,6 +132,7 @@ void setup() {
   StartWifiConnection();
   StartOTAProtocol();
   ServerSetup();
+  StartNVSMemory();
 }
 
 void loop() {
