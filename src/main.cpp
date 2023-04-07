@@ -3,7 +3,7 @@
 #include <ArduinoOTA.h>
 #include <ESPmDNS.h>
 #include <WiFiUdp.h>
-#include "RemoteDebug.h"
+#include "ESPAsyncWebServer.h"
 
 #define USE_OTA 1
 #define USE_WIFI 1
@@ -14,9 +14,19 @@ using timer = uint32_t;
 // TODO: Test task scheduling with FreeRTOS
 // TODO: Test RemoteDebug library
 // TODO: Test EEPROM library
-// TODO: Test physical I2C communication
+// TODO: Test physical I2C communication*
 // TODO: Test bluetooth communication
 // TODO: Test TCP communication
+
+AsyncWebServer server(80);
+static int16_t serverAccessCounter = 0;
+
+void ServerSetup() {
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+    request->send(200, "text/plain", "Hello, client #" + String(serverAccessCounter++));
+  });
+  server.begin();
+}
 
 void StartWifiConnection() {
 #if (USE_WIFI)
@@ -29,7 +39,6 @@ void StartWifiConnection() {
       Serial.println("Could not connect to WiFi");
       ESP.restart();
     }
-
   }
   Serial.println("");
   Serial.print("Connected to ");
@@ -48,7 +57,7 @@ void StartWifiConnection() {
 void StartOTAProtocol() {
 #if (USE_OTA) && (USE_WIFI)
   
-  ArduinoOTA.setHostname("ESP32-OTA"); // Set the hostname for the OTA service.
+  ArduinoOTA.setHostname("esp32"); // Set the hostname for the OTA service.
   ArduinoOTA.onStart([]() { // Method chain to set the OTA handlers.
     if (ArduinoOTA.getCommand() == U_FLASH) {
       Serial.println("Start updating sketch ...");
@@ -104,6 +113,7 @@ void setup() {
   Serial.begin(115200);
   StartWifiConnection();
   StartOTAProtocol();
+  ServerSetup();
 }
 
 void loop() {
