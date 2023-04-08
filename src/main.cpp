@@ -23,14 +23,36 @@ Preferences nvs_memory;
 AsyncWebServer server(80);
 static uint16_t serverAccessCounter = 0;
 
+//Blink LED with FreeRTOS
+
+void RTOSBlink(void* param) {
+  gpio_pad_select_gpio(GPIO_NUM_2); // Sets GPIO_NUM_2 to GPIO mode as pins can be configured to other modes
+  esp_err_t result = gpio_set_direction(GPIO_NUM_2, GPIO_MODE_INPUT_OUTPUT);
+  if (result != ESP_OK) {
+    Serial.printf("Error setting GPIO direction: %d", result);
+    vTaskDelete(NULL);
+  }
+  Serial.printf("Blink task started successfully");
+  while (1) {
+    bool level = !gpio_get_level(GPIO_NUM_2);
+    gpio_set_level(GPIO_NUM_2, level);
+    Serial.printf("LED set to: %d\n", level);
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
+  }
+}
+
+void StartRTOSBlink() {
+  xTaskCreate(RTOSBlink, "Blink", 1000, NULL, 1, NULL);
+}
+
 void StartNVSMemory() {
   nvs_memory.begin("flash", false);
   serverAccessCounter = nvs_memory.getUShort("access_counter", 0);
   if (serverAccessCounter == 0) {
-    Serial.printf("No access counter found. Initializing to 0");
+    Serial.printf("No access counter found. Initializing to 0\n");
     nvs_memory.putUShort("access_counter", 0);
   } else {
-    Serial.printf("Access counter found. Value: %d", serverAccessCounter);
+    Serial.printf("Access counter found. Value: %d\n", serverAccessCounter);
   }
 }
 
@@ -106,36 +128,15 @@ void OTAHandler () {
 #endif
 }
 
-void TogglePin(uint8_t pin, timer millis_delay_time, int16_t count = 0) {
-  static timer last_millis = 0;
-  static int16_t counter = 0;
-  static bool init_pin = false;
-  if (!init_pin) {
-    init_pin = true;
-    pinMode(pin, OUTPUT);
-  }
-
-  if (millis() - last_millis > millis_delay_time) {
-    last_millis = millis();
-    digitalWrite(pin, !digitalRead(pin));
-    if (count > 0) { // If count is 0 or not specified, the LED will toggle indefinitely.
-      if (counter++ > count) {
-        counter = 0;
-        digitalWrite(pin, LOW);
-      }
-    }
-  }
-}
-
 void setup() {
   Serial.begin(115200);
   StartWifiConnection();
   StartOTAProtocol();
   ServerSetup();
   StartNVSMemory();
+  StartRTOSBlink();
 }
 
 void loop() {
   OTAHandler();
-  TogglePin(2, 1000);
 }
